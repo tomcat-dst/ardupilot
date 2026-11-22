@@ -115,6 +115,11 @@ Plane::Plane(const char *frame_str) :
         mass = 2.0;
         coefficient.c_drag_p = 0.05;
     }
+
+    if (is_positive(coefficient.mass)) {
+        mass = coefficient.mass;
+        thrust_scale = (mass * GRAVITY_MSS) / hover_throttle;
+    }
 }
 
 void Plane::load_coeffs(const char *model_json)
@@ -189,6 +194,8 @@ void Plane::load_coeffs(const char *model_json)
         COFF_FLOAT(deltae_max),
         COFF_FLOAT(deltar_max),
         { "CGOffset", &coefficient.CGOffset, VarType::VECTOR3F },
+        COFF_FLOAT(mass),
+        { "inertia", &coefficient.inertia, VarType::VECTOR3F },
     };
 
     for (uint8_t i=0; i<ARRAY_SIZE(vars); i++) {
@@ -474,6 +481,11 @@ void Plane::calculate_forces(const struct sitl_input &input, Vector3f &rot_accel
     
     Vector3f force = getForce(aileron, elevator, rudder);
     rot_accel = getTorque(aileron, elevator, rudder, thrust, force);
+    if (coefficient.inertia.x > 0 && coefficient.inertia.y > 0 && coefficient.inertia.z > 0) {
+        rot_accel.x /= coefficient.inertia.x;
+        rot_accel.y /= coefficient.inertia.y;
+        rot_accel.z /= coefficient.inertia.z;
+    }
 
     if (have_launcher) {
         /*

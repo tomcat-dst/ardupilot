@@ -89,6 +89,9 @@ protected:
         // the X CoG offset should be -0.02, but that makes the plane too tail heavy
         // in manual flight. Adjusted to -0.15 gives reasonable flight
         Vector3f CGOffset{-0.15, 0, -0.05};
+        // optional overrides from a json model; zero keeps the built-in behaviour
+        float mass = 0;                 // kg
+        Vector3f inertia{0, 0, 0};      // kg m^2 about body x, y, z
     } default_coefficients;
 
     struct Coefficients coefficient;
