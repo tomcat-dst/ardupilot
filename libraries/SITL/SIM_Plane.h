@@ -92,6 +92,17 @@ protected:
         // optional overrides from a json model; zero keeps the built-in behaviour
         float mass = 0;                 // kg
         Vector3f inertia{0, 0, 0};      // kg m^2 about body x, y, z
+        // optional electric propulsion: motor + propeller + battery, replacing linear thrust
+        float num_motors = 0;
+        float motor_kv = 0;             // rpm per volt
+        float motor_R = 0;              // winding resistance, ohm
+        float motor_I0 = 0;             // no-load current, A
+        float esc_eff = 1;
+        float prop_diameter = 0;        // m
+        Vector3f prop_ct{0, 0, 0};      // thrust coefficient: ct0 + ct1*J + ct2*J^2
+        Vector3f prop_cp{0, 0, 0};      // power coefficient: cp0 + cp1*J + cp2*J^2
+        float prop_J_max = 1.0;         // advance ratio clamp for the polynomials
+        float batt_R = 0;               // battery plus wiring resistance, ohm
     } default_coefficients;
 
     struct Coefficients coefficient;
@@ -134,6 +145,10 @@ protected:
     Vector3f getForce(float inputAileron, float inputElevator, float inputRudder) const;
     Vector3f getTorque(float inputAileron, float inputElevator, float inputRudder, float inputThrust, const Vector3f &force) const;
     void calculate_forces(const struct sitl_input &input, Vector3f &rot_accel);
+    float electric_thrust(float throttle);
+
+    float prop_rpm = 0;
+    float last_param_voltage = -1;
 
 private:
     // json parsing helpers (TODO reduce code duplication)
