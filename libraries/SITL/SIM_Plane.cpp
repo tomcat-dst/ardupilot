@@ -200,6 +200,16 @@ void Plane::load_coeffs(const char *model_json)
         { "CGOffset", &coefficient.CGOffset, VarType::VECTOR3F },
         COFF_FLOAT(mass),
         { "inertia", &coefficient.inertia, VarType::VECTOR3F },
+        COFF_FLOAT(num_motors),
+        COFF_FLOAT(motor_kv),
+        COFF_FLOAT(motor_R),
+        COFF_FLOAT(motor_I0),
+        COFF_FLOAT(esc_eff),
+        COFF_FLOAT(prop_diameter),
+        { "prop_ct", &coefficient.prop_ct, VarType::VECTOR3F },
+        { "prop_cp", &coefficient.prop_cp, VarType::VECTOR3F },
+        COFF_FLOAT(prop_J_max),
+        COFF_FLOAT(batt_R),
     };
 
     for (uint8_t i=0; i<ARRAY_SIZE(vars); i++) {
@@ -407,6 +417,64 @@ Vector3f Plane::getForce(float inputAileron, float inputElevator, float inputRud
     return Vector3f(ax, ay, az);
 }
 
+/*
+  electric propulsion: ESC -> DC motor (kv, R, I0) -> propeller with thrust and power
+  coefficients as polynomials of advance ratio J. The motor speed is the steady-state
+  balance of motor and propeller torque, found by bisection. The bus voltage is the
+  battery model's; the resulting current is fed back to it in update_battery().
+  Returns total thrust in Newtons.
+ */
+float Plane::electric_thrust(float throttle)
+{
+    const auto &k = coefficient;
+
+    const float u = constrain_float(throttle, 0, 1);
+    const float v_motor = u * battery_voltage;
+    const float kv_rad = k.motor_kv * M_2PI / 60;    // rad/s per volt
+    const float D = k.prop_diameter;
+    const float v_axial = MAX(velocity_air_bf.x, 0);
+
+    auto coeffs = [&](float omega, float &ct, float &cp) {
+        const float n = omega / M_2PI;
+        float J = is_positive(n) ? v_axial / (n * D) : k.prop_J_max;
+        J = constrain_float(J, 0, k.prop_J_max);
+        ct = k.prop_ct.x + k.prop_ct.y * J + k.prop_ct.z * sq(J);
+        // keep propeller torque positive so the motor/prop balance has one solution
+        cp = MAX(k.prop_cp.x + k.prop_cp.y * J + k.prop_cp.z * sq(J), 0.001);
+    };
+    // motor torque minus propeller torque, decreasing in omega
+    auto torque_excess = [&](float omega) {
+        float ct, cp;
+        coeffs(omega, ct, cp);
+        const float n = omega / M_2PI;
+        const float i_motor = (v_motor - omega / kv_rad) / k.motor_R;
+        return (i_motor - k.motor_I0) / kv_rad - cp * air_density * sq(n) * powf(D, 5) / M_2PI;
+    };
+
+    float omega = 0;
+    if (is_positive(u) && torque_excess(0) > 0) {
+        float lo = 0, hi = v_motor * kv_rad;
+        for (uint8_t i=0; i<40; i++) {
+            const float mid = 0.5 * (lo + hi);
+            if (torque_excess(mid) > 0) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        omega = lo;
+    }
+
+    float ct, cp;
+    coeffs(omega, ct, cp);
+    const float n = omega / M_2PI;
+    const float i_motor = is_positive(omega) ? MAX((v_motor - omega / kv_rad) / k.motor_R, 0) : 0;
+    electric_current = k.num_motors * u * i_motor / k.esc_eff;
+    prop_rpm = omega * 60 / M_2PI;
+
+    return k.num_motors * ct * air_density * sq(n) * sq(sq(D));
+}
+
 void Plane::calculate_forces(const struct sitl_input &input, Vector3f &rot_accel)
 {
     float aileron  = filtered_servo_angle(input, 0);
@@ -457,11 +525,16 @@ void Plane::calculate_forces(const struct sitl_input &input, Vector3f &rot_accel
 
     float thrust = reverse_thrust ? filtered_servo_angle(input, 2) : filtered_servo_range(input, 2);
 
+    const bool electric = electric_propulsion();
+    electric_current = 0;
     if (ice_engine) {
         thrust = icengine.update(input);
     } else {
         if (battery_is_empty()) {
             thrust = 0.0f;
+        } else if (electric) {
+            // Newtons; also sets electric_current for update_battery()
+            thrust = electric_thrust(thrust);
         }
     }
 
@@ -507,10 +580,14 @@ void Plane::calculate_forces(const struct sitl_input &input, Vector3f &rot_accel
     
     // simulate engine RPM
     motor_mask |= (1U<<2);
-    rpm[2] = thrust * 7000;
-    
-    // scale thrust to newtons
-    thrust *= thrust_scale;
+    if (electric) {
+        rpm[2] = prop_rpm;
+    } else {
+        rpm[2] = thrust * 7000;
+
+        // scale thrust to newtons
+        thrust *= thrust_scale;
+    }
 
     accel_body = Vector3f(thrust, 0, 0) + force;
     accel_body /= mass;
@@ -562,10 +639,25 @@ void Plane::update(const struct sitl_input &input)
 }
 
 void Plane::update_battery(const struct sitl_input &input) {
-    battery.maybe_reset(sitl->batt_voltage, sitl->batt_capacity_ah);
+    const bool electric = electric_propulsion();
+    if (electric && !is_equal(last_param_voltage, sitl->batt_voltage.get())) {
+        // the battery's full voltage is fixed when the model is constructed, before
+        // parameter files are loaded; propulsion depends on it, so follow SIM_BATT_VOLTAGE
+        battery.setup(sitl->batt_capacity_ah,
+                      is_positive(coefficient.batt_R) ? coefficient.batt_R : 0.0145f,
+                      sitl->batt_voltage,
+                      ambient_outside_temperature_degC());
+        last_param_voltage = sitl->batt_voltage;
+    }
+    battery.maybe_reset(sitl->batt_voltage, sitl->batt_capacity_ah,
+                        (electric && is_positive(coefficient.batt_R)) ? coefficient.batt_R : -1.0f);
 
-    float throttle = reverse_thrust ? filtered_servo_angle(input, 2) : filtered_servo_range(input, 2);
-    battery_current = 50.0f * sq(throttle);
+    if (electric) {
+        battery_current = electric_current;
+    } else {
+        float throttle = reverse_thrust ? filtered_servo_angle(input, 2) : filtered_servo_range(input, 2);
+        battery_current = 50.0f * sq(throttle);
+    }
     battery.consume_energy(battery_current, AP_HAL::micros64());
     battery_voltage = battery.get_voltage();
     battery_temperature_degC = battery.get_temperature_degC();
