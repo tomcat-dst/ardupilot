@@ -40,7 +40,7 @@ const AP_Param::GroupInfo RFSearch::var_info[] = {
     // @Units: m
     // @Range: 300 10000
     // @User: Standard
-    AP_GROUPINFO("MIN_LEG", 4, RFSearch, _min_leg_m, 1500.0f),
+    AP_GROUPINFO("MIN_LEG", 4, RFSearch, _min_leg_m, 500.0f),
 
     // @Param: STALE
     // @DisplayName: RF reading timeout
