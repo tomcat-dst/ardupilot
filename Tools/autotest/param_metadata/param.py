@@ -117,6 +117,7 @@ known_units = {
              '%/s'     : 'percent per second'    ,
              'd%'      : 'decipercent'           , # decipercent is strange, but "per-mille" is even more exotic
              'dB'      : 'decibel'               ,
+             'dBm'     : 'decibel-milliwatts'    ,
 # compound
 
              'kB'      : 'kilobytes'               ,
