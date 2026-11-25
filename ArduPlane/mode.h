@@ -70,6 +70,7 @@ public:
 #if MODE_AUTOLAND_ENABLED
         AUTOLAND      = 26,
 #endif
+        RFSEARCH      = 27,     // AUTO with RF direction-finding sweeps, see rf_search.h
 
     // Mode number 30 reserved for "offboard" for external/lua control.
     };
@@ -257,9 +258,13 @@ class ModeAuto : public Mode
 public:
     friend class Plane;
 
-    Number mode_number() const override { return Number::AUTO; }
-    const char *name() const override { return "Auto"; }
-    const char *name4() const override { return "AUTO"; }
+    // RFSEARCH is this mode with rf_search set: same object, so all the AUTO checks still hold
+    Number mode_number() const override { return rf_search ? Number::RFSEARCH : Number::AUTO; }
+    const char *name() const override { return rf_search ? "RFSearch" : "Auto"; }
+    const char *name4() const override { return rf_search ? "RFSR" : "AUTO"; }
+
+    void set_rf_search(bool enable);
+    bool rf_search_enabled() const { return rf_search; }
 
     bool does_automatic_thermal_switch() const override { return true; }
 
@@ -306,6 +311,11 @@ protected:
     bool _pre_arm_checks(size_t buflen, char *buffer) const override;
 
 private:
+
+    // flying as RFSEARCH; only set_mode_by_number() changes it
+    bool rf_search = false;
+    bool rf_sweeping = false;
+    bool rf_search_leg_ok();
 
     // Delay the next navigation command
     struct {

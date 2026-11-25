@@ -52,6 +52,7 @@ uint8_t GCS_MAVLINK_Plane::base_mode() const
         _base_mode = MAV_MODE_FLAG_STABILIZE_ENABLED;
         break;
     case Mode::Number::AUTO:
+    case Mode::Number::RFSEARCH:
     case Mode::Number::RTL:
     case Mode::Number::LOITER:
     case Mode::Number::THERMAL:
@@ -1028,6 +1029,18 @@ void GCS_MAVLINK_Plane::handle_message(const mavlink_message_t &msg)
         handle_set_position_target_global_int(msg);
         break;
 
+    case MAVLINK_MSG_ID_NAMED_VALUE_FLOAT: {
+        // the companion's RF analyzer reading drives RFSEARCH sweeps
+        mavlink_named_value_float_t packet;
+        mavlink_msg_named_value_float_decode(&msg, &packet);
+        if (strncmp(packet.name, "RF_dBm", sizeof(packet.name)) == 0) {
+            plane.g2.rf_search.handle_rf_dbm(packet.value);
+        }
+        // still logged as NVAL
+        GCS_MAVLINK::handle_message(msg);
+        break;
+    }
+
     default:
         GCS_MAVLINK::handle_message(msg);
         break;
@@ -1335,7 +1348,8 @@ uint8_t GCS_MAVLINK_Plane::send_available_mode(uint8_t index) const
 #endif
     };
 
-    const uint8_t fw_mode_count = ARRAY_SIZE(fw_modes);
+    // plus RFSEARCH, which is mode_auto under another number
+    const uint8_t fw_mode_count = ARRAY_SIZE(fw_modes) + 1;
 
     // Fixedwing modes are always present
     uint8_t mode_count = fw_mode_count;
@@ -1373,7 +1387,16 @@ uint8_t GCS_MAVLINK_Plane::send_available_mode(uint8_t index) const
     const char* name;
     Mode::Number mode_number;
 
-    if (index_zero < fw_mode_count) {
+    if (index_zero == ARRAY_SIZE(fw_modes)) {
+        name = "RFSearch";
+        mode_number = Mode::Number::RFSEARCH;
+
+    } else if (fw_modes[index_zero] == &plane.mode_auto) {
+        // not from the object: it answers RFSEARCH while flying as such
+        name = "Auto";
+        mode_number = Mode::Number::AUTO;
+
+    } else if (index_zero < fw_mode_count) {
         // A fixedwing mode
         name = fw_modes[index_zero]->name();
         mode_number = fw_modes[index_zero]->mode_number();

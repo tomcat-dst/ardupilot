@@ -1279,6 +1279,10 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("GUIDED_TIMEOUT", 40, ParametersG2, guided_timeout, 3.0f),
 
+    // @Group: RFS_
+    // @Path: rf_search.cpp
+    AP_SUBGROUPINFO(rf_search, "RFS_", 41, ParametersG2, RFSearch),
+
     AP_GROUPEND
 };
 

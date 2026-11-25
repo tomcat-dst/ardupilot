@@ -35,6 +35,8 @@ Mode *Plane::mode_from_mode_num(const enum Mode::Number num)
         ret = &mode_autotune;
         break;
     case Mode::Number::AUTO:
+    case Mode::Number::RFSEARCH:
+        // the same object; set_mode_by_number() sets which of the two it is
         ret = &mode_auto;
         break;
     case Mode::Number::RTL:

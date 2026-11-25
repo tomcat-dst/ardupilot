@@ -261,6 +261,23 @@ bool Plane::set_mode(Mode &new_mode, const ModeReason reason)
         return true;
     }
 
+    if (&new_mode == &mode_auto) {
+        // RFSEARCH stays set when code returns to the mode flown before (fence, soaring), but a switch
+        // into AUTO to land (RTL autoland, failsafe to DO_LAND_START) is plain AUTO
+        switch (reason) {
+        case ModeReason::RADIO_FAILSAFE:
+        case ModeReason::GCS_FAILSAFE:
+        case ModeReason::BATTERY_FAILSAFE:
+            mode_auto.set_rf_search(false);
+            break;
+        default:
+            if (mode_reason_is_landing_sequence(reason)) {
+                mode_auto.set_rf_search(false);
+            }
+            break;
+        }
+    }
+
 #if HAL_QUADPLANE_ENABLED
     if (new_mode.is_vtol_mode() && !plane.quadplane.available()) {
         // dont try and switch to a Q mode if quadplane is not enabled and initialized
@@ -364,6 +381,30 @@ bool Plane::set_mode_by_number(const Mode::Number new_mode_number, const ModeRea
     if (new_mode == nullptr) {
         notify_no_such_mode(new_mode_number);
         return false;
+    }
+    if (new_mode == &mode_auto) {
+        // AUTO and RFSEARCH are the same mode object, the number picks which
+        const bool was_rf_search = mode_auto.rf_search_enabled();
+        const bool rf_search = new_mode_number == Mode::Number::RFSEARCH;
+        mode_auto.set_rf_search(rf_search);
+        if (control_mode == &mode_auto) {
+            if (was_rf_search != rf_search) {
+                // switching between the two: no exit/enter, the mission carries on
+                control_mode_reason = reason;
+#if HAL_LOGGING_ENABLED
+                logger.Write_Mode(control_mode->mode_number(), control_mode_reason);
+#endif
+                notify_mode(*control_mode);
+                gcs().send_message(MSG_HEARTBEAT);
+                AP_Notify::events.user_mode_change = 1;
+            }
+            return true;
+        }
+        if (!set_mode(mode_auto, reason)) {
+            mode_auto.set_rf_search(was_rf_search);
+            return false;
+        }
+        return true;
     }
     return set_mode(*new_mode, reason);
 }

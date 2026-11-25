@@ -158,6 +158,7 @@ public:
     friend class ModeCruise;
     friend class ModeAutoTune;
     friend class ModeAuto;
+    friend class RFSearch;
     friend class ModeRTL;
     friend class ModeLoiter;
     friend class ModeAvoidADSB;

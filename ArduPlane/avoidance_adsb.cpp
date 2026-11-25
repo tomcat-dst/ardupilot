@@ -140,8 +140,9 @@ void AP_Avoidance_Plane::handle_recovery(RecoveryAction recovery_action)
                 break;
 
             case RecoveryAction::RESUME_IF_AUTO_ELSE_LOITER:
-                if (prev_control_mode_number == Mode::Number::AUTO) {
-                    plane.set_mode(plane.mode_auto, ModeReason::AVOIDANCE_RECOVERY);
+                if (prev_control_mode_number == Mode::Number::AUTO ||
+                    prev_control_mode_number == Mode::Number::RFSEARCH) {
+                    plane.set_mode_by_number(prev_control_mode_number, ModeReason::AVOIDANCE_RECOVERY);
                 } else {
                     // let ModeAvoidADSB continue in its guided
                     // behaviour, but reset the loiter location,

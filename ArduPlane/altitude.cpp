@@ -77,6 +77,7 @@ void Plane::setup_alt_slope(void)
         break;
 
     case Mode::Number::AUTO:
+    case Mode::Number::RFSEARCH:
         // climb without doing slope if option is enabled
         if (!above_location_current(next_WP_loc) && plane.flight_option_enabled(FlightOptions::IMMEDIATE_CLIMB_IN_AUTO)) {
             reset_offset_altitude();
@@ -852,6 +853,7 @@ const Plane::TerrainLookupTable Plane::Terrain_lookup[] = {
     {Mode::Number::FLY_BY_WIRE_B, terrain_bitmask::FLY_BY_WIRE_B},
     {Mode::Number::CRUISE, terrain_bitmask::CRUISE},
     {Mode::Number::AUTO, terrain_bitmask::AUTO},
+    {Mode::Number::RFSEARCH, terrain_bitmask::AUTO},
     {Mode::Number::RTL, terrain_bitmask::RTL},
     {Mode::Number::AVOID_ADSB, terrain_bitmask::AVOID_ADSB},
     {Mode::Number::GUIDED, terrain_bitmask::GUIDED},

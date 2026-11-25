@@ -3,6 +3,7 @@
 #define AP_PARAM_VEHICLE_NAME plane
 
 #include <AP_Common/AP_Common.h>
+#include "rf_search.h"
 
 // Global parameter class.
 //
@@ -595,6 +596,9 @@ public:
 #if AP_PLANE_SYSTEMID_ENABLED
     AP_SystemID systemid;
 #endif
+
+    // RFSEARCH mode sweeps
+    RFSearch rf_search;
 };
 
 extern const AP_Param::Info var_info[];

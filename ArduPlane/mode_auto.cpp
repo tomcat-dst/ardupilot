@@ -3,6 +3,9 @@
 
 bool ModeAuto::_enter()
 {
+    // RFSEARCH: track distance afresh; the first valid reading may start a sweep
+    plane.g2.rf_search.reset();
+
 #if HAL_QUADPLANE_ENABLED
     // check if we should refuse auto mode due to a missing takeoff in
     // guided_wait_takeoff state
@@ -44,6 +47,9 @@ bool ModeAuto::_enter()
 
 void ModeAuto::_exit()
 {
+    // RFSEARCH: hand the steering back with the sweep reported over
+    plane.g2.rf_search.abort("aborted, mode change");
+
     if (plane.mission.state() == AP_Mission::MISSION_RUNNING) {
         plane.mission.stop();
 
@@ -124,8 +130,41 @@ void ModeAuto::update()
 void ModeAuto::navigate()
 {
     if (AP::ahrs().home_is_set()) {
+        if (rf_search &&
+            plane.g2.rf_search.update(plane.current_loc, plane.prev_WP_loc, plane.next_WP_loc, rf_search_leg_ok())) {
+            // a sweep owns the steering; the mission carries on when it ends
+            rf_sweeping = true;
+            return;
+        }
+        if (rf_sweeping) {
+            // the sweep has moved the aircraft off the leg: fly on from here rather than cutting back
+            // across to the old track line (an S-turn after every sweep)
+            rf_sweeping = false;
+            plane.prev_WP_loc = plane.current_loc;
+        }
         plane.mission.update();
     }
+}
+
+void ModeAuto::set_rf_search(bool enable)
+{
+    if (enable != rf_search) {
+        plane.g2.rf_search.abort("aborted, now AUTO");
+        plane.g2.rf_search.reset();
+    }
+    rf_search = enable;
+}
+
+// sweeps only on a plain waypoint leg in normal flight: not taking off, landing or in failsafe
+bool ModeAuto::rf_search_leg_ok()
+{
+    return plane.mission.get_current_nav_cmd().id == MAV_CMD_NAV_WAYPOINT &&
+           plane.flight_stage == AP_FixedWing::FlightStage::NORMAL &&
+           !plane.mission.get_in_landing_sequence_flag() &&
+           plane.is_flying() &&
+           !plane.failsafe.rc_failsafe &&
+           plane.failsafe.state == FAILSAFE_NONE &&
+           !AP::battery().has_failsafed();
 }
 
 
