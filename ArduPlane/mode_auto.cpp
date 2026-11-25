@@ -155,15 +155,15 @@ void ModeAuto::set_rf_search(bool enable)
     rf_search = enable;
 }
 
-// sweeps only on a plain waypoint leg in normal flight: not taking off, landing or in failsafe
+// sweeps only on a plain waypoint leg in normal flight: not taking off, landing or in battery failsafe.
+// An RC or GCS failsafe does not stop them: if its action left the aircraft in this mode (FS_SHORT_ACTN 0,
+// FS_LONG_ACTN 0), the mission goes on, and the search area is beyond RC range anyway.
 bool ModeAuto::rf_search_leg_ok()
 {
     return plane.mission.get_current_nav_cmd().id == MAV_CMD_NAV_WAYPOINT &&
            plane.flight_stage == AP_FixedWing::FlightStage::NORMAL &&
            !plane.mission.get_in_landing_sequence_flag() &&
            plane.is_flying() &&
-           !plane.failsafe.rc_failsafe &&
-           plane.failsafe.state == FAILSAFE_NONE &&
            !AP::battery().has_failsafed();
 }
 

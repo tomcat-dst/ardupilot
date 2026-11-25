@@ -38,7 +38,7 @@ public:
     void abort(const char *why);
 
     // called from ModeAuto::navigate() in RFSEARCH at the navigation rate. leg_ok: on a plain
-    // waypoint leg, not taking off, landing or in failsafe. Returns true while a sweep owns the
+    // waypoint leg, not taking off, landing or in battery failsafe. Returns true while a sweep owns the
     // steering (the mission is then not updated)
     bool update(const Location &here, const Location &prev_wp, const Location &next_wp, bool leg_ok);
 
