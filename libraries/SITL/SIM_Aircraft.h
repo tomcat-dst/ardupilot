@@ -270,9 +270,8 @@ protected:
     } wind_vane_apparent;
 
     // Wind Turbulence simulated Data
-    float turbulence_azimuth;
-    float turbulence_horizontal_speed;  // m/s
-    float turbulence_vertical_speed;    // m/s
+    // exponentially correlated gust, earth frame NED, m/s (see update_wind)
+    Vector3f turbulence_ef;
 
     Vector3f mag_bf;  // local earth magnetic field vector in Gauss, earth frame
 

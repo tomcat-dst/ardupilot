@@ -894,22 +894,35 @@ void Aircraft::update_wind(const struct sitl_input &input)
 
     wind_ef.z += get_local_updraft(position + home.get_distance_NED_double(origin));
 
-    const float wind_turb = input.wind.turbulence * 10.0f;  // scale input.wind.turbulence to match standard deviation when using iir_coef=0.98
-    const float iir_coef = 0.98f;  // filtering high frequencies from turbulence
+    /*
+      Turbulence as an exponentially correlated (Ornstein-Uhlenbeck) gust in each earth-frame
+      axis. SIM_WIND_TURB is the standard deviation of each component in m/s.
 
-    if (wind_turb > 0 && !on_ground()) {
+      The correlation length is the Dryden integral scale of MIL-F-8785C: the height above
+      ground below 305 m, and 533 m above it, floored at 10 m so it stays finite near the
+      ground. The gust correlation time is that length divided by airspeed, so the gust is a
+      property of the air the aircraft flies through rather than of the simulation rate.
 
-        turbulence_azimuth = turbulence_azimuth + (2 * rand());
-
-        turbulence_horizontal_speed =
-                static_cast<float>(turbulence_horizontal_speed * iir_coef+wind_turb * rand_normal(0, 1) * (1 - iir_coef));
-
-        turbulence_vertical_speed = static_cast<float>((turbulence_vertical_speed * iir_coef) + (wind_turb * rand_normal(0, 1) * (1 - iir_coef)));
-
-        wind_ef += Vector3f(
-            cosf(radians(turbulence_azimuth)) * turbulence_horizontal_speed,
-            sinf(radians(turbulence_azimuth)) * turbulence_horizontal_speed,
-            turbulence_vertical_speed);
+      alpha/beta are the exact discretisation of the process, so the steady-state standard
+      deviation is SIM_WIND_TURB whatever the frame rate, and the autocorrelation decays as
+      exp(-t*V/L). Only the first-order (Dryden u) shape is used, for the lateral and vertical
+      components too; their true Dryden spectra have a second-order shape with slightly more
+      mid-frequency energy. That refinement is not worth having while the gust is still one
+      uniform vector over the whole airframe and the aerodynamics are quasi-steady.
+     */
+    if (is_positive(input.wind.turbulence) && !on_ground()) {
+        const float L = constrain_float(hagl(), 10.0f, 533.0f);
+        const float V = MAX(airspeed, 2.0f);
+        const float dt = frame_time_us * 1.0e-6f;
+        const float alpha = expf(-dt * V / L);
+        const float beta = safe_sqrt(1.0f - sq(alpha));
+        for (uint8_t i = 0; i < 3; i++) {
+            turbulence_ef[i] = alpha * turbulence_ef[i] +
+                               beta * input.wind.turbulence * float(rand_normal(0, 1));
+        }
+        wind_ef += turbulence_ef;
+    } else {
+        turbulence_ef.zero();
     }
 
     // the AHRS wants wind with opposite sense
