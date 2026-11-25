@@ -120,6 +120,12 @@ Plane::Plane(const char *frame_str) :
         mass = coefficient.mass;
         thrust_scale = (mass * GRAVITY_MSS) / hover_throttle;
     }
+
+    if (is_positive(coefficient.launch_accel) && is_positive(coefficient.launch_time)) {
+        have_launcher = true;
+        launch_accel = coefficient.launch_accel;
+        launch_time = coefficient.launch_time;
+    }
 }
 
 void Plane::load_coeffs(const char *model_json)
@@ -206,6 +212,8 @@ void Plane::load_coeffs(const char *model_json)
         { "prop_cp", &coefficient.prop_cp, VarType::VECTOR3F },
         COFF_FLOAT(prop_J_max),
         COFF_FLOAT(batt_R),
+        COFF_FLOAT(launch_accel),
+        COFF_FLOAT(launch_time),
     };
 
     for (uint8_t i=0; i<ARRAY_SIZE(vars); i++) {

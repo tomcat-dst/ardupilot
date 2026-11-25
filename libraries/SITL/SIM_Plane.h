@@ -103,6 +103,9 @@ protected:
         Vector3f prop_cp{0, 0, 0};      // power coefficient: cp0 + cp1*J + cp2*J^2
         float prop_J_max = 1.0;         // advance ratio clamp for the polynomials
         float batt_R = 0;               // battery plus wiring resistance, ohm
+        // optional launcher (catapult) triggered by servo 7 > 1700, like the -catapult frame
+        float launch_accel = 0;         // m/s^2 along body x while the launcher pushes
+        float launch_time = 0;          // s
     } default_coefficients;
 
     struct Coefficients coefficient;
